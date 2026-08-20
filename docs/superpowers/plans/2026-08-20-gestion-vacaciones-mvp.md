@@ -2277,7 +2277,11 @@ git commit -m "feat(store): esquema, ledger append-only por permisos y migrador"
 
 ## Task 13: Repositorios
 
-Un principio para toda esta capa: los decimales **nunca** pasan por `float64`. Se leen con `columna::text` y se escriben con `$n::numeric` pasando `decimal.String()`. Eso evita una dependencia extra de pgx y hace explícito el requisito no funcional.
+Dos principios para toda esta capa.
+
+**Los decimales nunca pasan por `float64`.** Se leen con `columna::text` y se escriben con `$n::numeric` pasando `decimal.String()`. Eso evita una dependencia extra de pgx y hace explícito el requisito no funcional.
+
+**Las fechas se leen en UTC y no se re-localizan nunca.** pgx entrega las columnas `date` como `time.Time` a medianoche UTC. Si alguien las pasa por `.In(alguna_zona)`, el día calendario cambia y `SoloFecha` **no** lo recupera: `SoloFecha` lee el reloj de pared, así que una medianoche UTC vista en −04:00 ya es el día anterior y se queda ahí. Esto importa porque el calendario de feriados se indexa por día y la clave de idempotencia lleva la fecha: un corrimiento de zona haría contar mal un feriado o duplicar un devengo. La regla es simple: no llamar a `.In()` sobre un valor que viene de una columna `date`, y aplicar `domain.SoloFecha` al escanear.
 
 **Files:**
 - Create: `internal/store/store.go`, `internal/store/colaborador_repo.go`, `internal/store/tipo_repo.go`, `internal/store/ledger_repo.go`, `internal/store/solicitud_repo.go`, `internal/store/calendario_repo.go`
@@ -3042,7 +3046,7 @@ func (s *Servicio) Saldo(ctx context.Context, colaboradorID uuid.UUID, verComoRR
 		return SaldoCompleto{}, err
 	}
 
-	proyeccion := domain.ProyectarSaldo(bolsas, tipos, hoy)
+	proyeccion := domain.ProyectarSaldo(colaboradorID, bolsas, tipos, hoy)
 
 	out := SaldoCompleto{
 		ColaboradorID:     colaborador.ID,
@@ -3663,6 +3667,13 @@ func validarTipo(t domain.TipoDeVacacion) error {
 	}
 	if t.Nombre == "" {
 		return errors.New("el nombre es obligatorio")
+	}
+
+	// Los parámetros llegan como jsonb editable desde la pantalla de RRHH.
+	// Validarlos acá es lo que impide que un "15,5" con coma se persista y
+	// después reviente en cada consulta de saldo.
+	if err := t.Parametros.Validar(); err != nil {
+		return err
 	}
 
 	switch t.PoliticaDevengo {
