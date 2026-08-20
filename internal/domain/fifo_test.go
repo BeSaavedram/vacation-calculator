@@ -140,3 +140,39 @@ func TestAsignarConsumo_RepartEntreTresBolsas(t *testing.T) {
 		}
 	}
 }
+
+// bolsaConID arma una bolsa con un ID fijo, para poder razonar sobre el
+// desempate sin depender del azar de uuid.New().
+func bolsaConID(id uuid.UUID, vence *time.Time, remanente string, prioridad int) Bolsa {
+	return Bolsa{
+		Otorgamiento: Otorgamiento{ID: id, VenceEl: vence},
+		Prioridad:    prioridad,
+		Movimientos: []Movimiento{
+			{OtorgamientoID: id, Clase: ClaseAccrual, Cantidad: decimal.RequireFromString(remanente)},
+		},
+	}
+}
+
+// Con vencimiento y prioridad iguales, el orden lo decidía el orden de filas del
+// repositorio: la misma solicitud podía repartirse distinto entre corridas.
+func TestAsignarConsumo_DesempateDeterministaPorID(t *testing.T) {
+	misma := Fecha(2027, 1, 1)
+	menor := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	mayor := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	ordenes := [][]Bolsa{
+		{bolsaConID(menor, &misma, "5", 10), bolsaConID(mayor, &misma, "5", 10)},
+		{bolsaConID(mayor, &misma, "5", 10), bolsaConID(menor, &misma, "5", 10)},
+	}
+
+	for i, bolsas := range ordenes {
+		asignaciones, err := AsignarConsumo(bolsas, decimal.RequireFromString("2"), Fecha(2026, 9, 1))
+		if err != nil {
+			t.Fatalf("orden %d: error inesperado: %v", i, err)
+		}
+		if asignaciones[0].OtorgamientoID != menor {
+			t.Fatalf("orden %d: consumió de %s, esperado siempre %s: el reparto debe ser reproducible",
+				i, asignaciones[0].OtorgamientoID, menor)
+		}
+	}
+}

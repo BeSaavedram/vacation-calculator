@@ -101,3 +101,52 @@ func TestClavesIdempotencia_NoDependenDeLaZona(t *testing.T) {
 		}
 	}
 }
+
+// El signo es lo que hace funcionar el ledger: una bolsa con ACCRUAL +15 y
+// CONSUMPTION +5 reporta 20 en vez de 10, y un movimiento equivocado no se
+// puede corregir reejecutando nada.
+func TestMovimientoValidar(t *testing.T) {
+	casos := []struct {
+		nombre      string
+		clase       ClaseMovimiento
+		cantidad    string
+		esperaError bool
+	}{
+		{"accrual positivo", ClaseAccrual, "15", false},
+		{"accrual negativo", ClaseAccrual, "-15", true},
+		{"saldo inicial positivo", ClaseOpening, "10", false},
+		{"saldo inicial negativo", ClaseOpening, "-10", true},
+		{"ajuste positivo", ClaseAdjustment, "2", false},
+		{"ajuste negativo", ClaseAdjustment, "-2", true},
+		{"consumo negativo", ClaseConsumption, "-5", false},
+		{"consumo positivo", ClaseConsumption, "5", true},
+		{"vencimiento negativo", ClaseExpiration, "-3", false},
+		{"vencimiento positivo", ClaseExpiration, "3", true},
+		{"pago de finiquito negativo", ClasePayout, "-8", false},
+		{"pago de finiquito positivo", ClasePayout, "8", true},
+		{"reversal positivo: refleja lo que revierte", ClaseReversal, "5", false},
+		{"reversal negativo: también", ClaseReversal, "-5", false},
+		{"cero en accrual", ClaseAccrual, "0", true},
+		{"cero en consumo", ClaseConsumption, "0", true},
+		{"cero en reversal", ClaseReversal, "0", true},
+	}
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			m := Movimiento{Clase: c.clase, Cantidad: decimal.RequireFromString(c.cantidad)}
+			err := m.Validar()
+			if c.esperaError && err == nil {
+				t.Fatalf("%s con cantidad %s debía ser inválido", c.clase, c.cantidad)
+			}
+			if !c.esperaError && err != nil {
+				t.Fatalf("%s con cantidad %s debía ser válido, dio: %v", c.clase, c.cantidad, err)
+			}
+		})
+	}
+}
+
+func TestMovimientoValidar_ClaseDesconocida(t *testing.T) {
+	m := Movimiento{Clase: ClaseMovimiento("INVENTADA"), Cantidad: decimal.RequireFromString("1")}
+	if m.Validar() == nil {
+		t.Fatal("una clase desconocida debe ser inválida")
+	}
+}

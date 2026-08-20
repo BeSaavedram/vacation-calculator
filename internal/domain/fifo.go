@@ -16,6 +16,10 @@ var ErrSaldoInsuficiente = errors.New("saldo insuficiente")
 // Asignacion es un tramo de consumo contra una bolsa concreta. Cada asignación
 // se convertirá en un movimiento CONSUMPTION propio, para que el historial
 // muestre de qué bolsa salió cada día.
+//
+// Dias es SIEMPRE positivo: es una cantidad pedida, no un movimiento. Quien
+// escriba el CONSUMPTION debe negarlo, según la convención de signos
+// documentada en Movimiento.
 type Asignacion struct {
 	OtorgamientoID uuid.UUID
 	Dias           decimal.Decimal
@@ -69,21 +73,26 @@ func bolsasConsumibles(bolsas []Bolsa, alDia time.Time) []Bolsa {
 // ordenarFIFO ordena por vence_el ascendente y, a igual fecha, por prioridad.
 // Las bolsas sin vencimiento van al final: se consumen cuando ya no queda nada
 // que esté por perderse.
+//
+// El último desempate es el ID del otorgamiento. Sin él, dos bolsas con el mismo
+// vencimiento y la misma prioridad quedaban en el orden en que las devolvió el
+// repositorio, y la misma solicitud podía repartirse distinto entre corridas.
 func ordenarFIFO(bolsas []Bolsa) {
 	sort.SliceStable(bolsas, func(i, j int) bool {
 		vi, vj := bolsas[i].Otorgamiento.VenceEl, bolsas[j].Otorgamiento.VenceEl
 
 		switch {
-		case vi == nil && vj == nil:
-			return bolsas[i].Prioridad < bolsas[j].Prioridad
-		case vi == nil:
+		case vi == nil && vj != nil:
 			return false
-		case vj == nil:
+		case vi != nil && vj == nil:
 			return true
-		case !vi.Equal(*vj):
+		case vi != nil && vj != nil && !vi.Equal(*vj):
 			return vi.Before(*vj)
-		default:
+		}
+
+		if bolsas[i].Prioridad != bolsas[j].Prioridad {
 			return bolsas[i].Prioridad < bolsas[j].Prioridad
 		}
+		return bolsas[i].Otorgamiento.ID.String() < bolsas[j].Otorgamiento.ID.String()
 	})
 }

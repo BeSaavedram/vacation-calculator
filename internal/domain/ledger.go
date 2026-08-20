@@ -29,6 +29,18 @@ type Otorgamiento struct {
 // FechaEfectiva es cuándo ocurrió el hecho; FechaRegistro es cuándo lo supimos.
 // Guardar ambas permite responder "¿qué sabíamos el 3 de marzo?" y no solo
 // "¿qué es cierto hoy?".
+//
+// CONVENCIÓN DE SIGNOS — es lo que hace funcionar todo el ledger, porque
+// Remanente() suma con signo y no interpreta la clase:
+//
+//	ACCRUAL, OPENING_BALANCE, ADJUSTMENT ....... Cantidad POSITIVA (suman días)
+//	CONSUMPTION, EXPIRATION, SETTLEMENT_PAYOUT . Cantidad NEGATIVA (restan días)
+//	REVERSAL ................................... el signo opuesto al que revierte
+//
+// Cero nunca es válido: un movimiento sin efecto no se registra.
+//
+// Un signo equivocado no se puede corregir reejecutando nada, así que Validar()
+// debe llamarse antes de persistir cualquier movimiento.
 type Movimiento struct {
 	ID                uuid.UUID
 	EmpresaID         uuid.UUID
@@ -42,6 +54,30 @@ type Movimiento struct {
 	Motivo            string
 	ClaveIdempotencia string
 	ReversaDe         *uuid.UUID
+}
+
+// Validar verifica que el signo de la cantidad corresponda a la clase del
+// movimiento, según la convención documentada en Movimiento.
+func (m Movimiento) Validar() error {
+	if m.Cantidad.IsZero() {
+		return fmt.Errorf("cantidad cero en un movimiento %s: un movimiento sin efecto no se registra", m.Clase)
+	}
+
+	switch m.Clase {
+	case ClaseAccrual, ClaseOpening, ClaseAdjustment:
+		if m.Cantidad.IsNegative() {
+			return fmt.Errorf("%s debe tener cantidad positiva, se recibió %s", m.Clase, m.Cantidad)
+		}
+	case ClaseConsumption, ClaseExpiration, ClasePayout:
+		if m.Cantidad.IsPositive() {
+			return fmt.Errorf("%s debe tener cantidad negativa, se recibió %s", m.Clase, m.Cantidad)
+		}
+	case ClaseReversal:
+		// Cualquier signo: un REVERSAL refleja el movimiento que revierte.
+	default:
+		return fmt.Errorf("clase de movimiento desconocida: %q", m.Clase)
+	}
+	return nil
 }
 
 // Bolsa es un otorgamiento junto a los movimientos que lo afectaron. El saldo
