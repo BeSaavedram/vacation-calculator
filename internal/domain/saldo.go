@@ -48,16 +48,27 @@ func (s Saldo) Total() decimal.Decimal {
 
 // ProyectarSaldo reduce las bolsas de un colaborador a su saldo disponible por
 // tipo, descartando lo vencido y destacando lo que está por vencer.
-func ProyectarSaldo(bolsas []Bolsa, tipos map[uuid.UUID]TipoDeVacacion, alDia time.Time) Saldo {
+//
+// colaboradorID se recibe y NO se infiere de las bolsas: cero bolsas es el
+// estado normal de todo recién contratado, y ahí no hay nada de dónde inferirlo.
+// El llamador siempre tiene este dato.
+//
+// alDia decide ÚNICAMENTE el vencimiento y la ventana de aviso. El remanente de
+// cada bolsa sigue siendo la suma completa de su ledger, incluidos los consumos
+// con fecha efectiva futura: unas vacaciones aprobadas para el mes que viene ya
+// están comprometidas y no deben poder gastarse dos veces.
+func ProyectarSaldo(
+	colaboradorID uuid.UUID,
+	bolsas []Bolsa,
+	tipos map[uuid.UUID]TipoDeVacacion,
+	alDia time.Time,
+) Saldo {
 	alDia = SoloFecha(alDia)
 	limiteAviso := alDia.AddDate(0, 0, DiasParaAvisoDeVencimiento)
 
 	porTipo := make(map[uuid.UUID]*SaldoPorTipo)
-	var colaboradorID uuid.UUID
 
 	for _, b := range bolsas {
-		colaboradorID = b.Otorgamiento.ColaboradorID
-
 		if !b.VigenteAl(alDia) {
 			continue
 		}

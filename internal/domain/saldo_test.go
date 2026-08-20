@@ -20,7 +20,7 @@ func TestProyectarSaldo_SumaSoloBolsasVigentes(t *testing.T) {
 		tipoID: {ID: tipoID, Codigo: "FERIADO_LEGAL", Nombre: "Feriado legal"},
 	}
 
-	saldo := ProyectarSaldo(bolsas, tipos, Fecha(2026, 9, 1))
+	saldo := ProyectarSaldo(uuid.New(), bolsas, tipos, Fecha(2026, 9, 1))
 
 	if len(saldo.PorTipo) != 1 {
 		t.Fatalf("esperaba 1 tipo, dio %d", len(saldo.PorTipo))
@@ -41,7 +41,7 @@ func TestProyectarSaldo_MarcaLoQueEstaPorVencer(t *testing.T) {
 	}
 	tipos := map[uuid.UUID]TipoDeVacacion{tipoID: {ID: tipoID, Codigo: "FERIADO_LEGAL"}}
 
-	saldo := ProyectarSaldo(bolsas, tipos, Fecha(2026, 9, 1))
+	saldo := ProyectarSaldo(uuid.New(), bolsas, tipos, Fecha(2026, 9, 1))
 
 	if len(saldo.PorTipo[0].PorVencer) != 1 {
 		t.Fatalf("esperaba 1 bolsa por vencer, dio %d", len(saldo.PorTipo[0].PorVencer))
@@ -64,7 +64,7 @@ func TestProyectarSaldo_AgrupaPorTipo(t *testing.T) {
 		administrativo: {ID: administrativo, Codigo: "ADMINISTRATIVO", PrioridadConsumo: 20},
 	}
 
-	saldo := ProyectarSaldo(bolsas, tipos, Fecha(2026, 9, 1))
+	saldo := ProyectarSaldo(uuid.New(), bolsas, tipos, Fecha(2026, 9, 1))
 
 	if len(saldo.PorTipo) != 2 {
 		t.Fatalf("esperaba 2 tipos, dio %d", len(saldo.PorTipo))
@@ -75,5 +75,41 @@ func TestProyectarSaldo_AgrupaPorTipo(t *testing.T) {
 	}
 	if !saldo.Total().Equal(decimal.RequireFromString("24")) {
 		t.Fatalf("Total = %s, esperado 24", saldo.Total())
+	}
+}
+
+// Cero bolsas es el estado NORMAL de todo recién contratado: el saldo debe
+// seguir identificando a quién pertenece.
+func TestProyectarSaldo_SinBolsasConservaElColaborador(t *testing.T) {
+	colaborador := uuid.New()
+
+	saldo := ProyectarSaldo(colaborador, nil, map[uuid.UUID]TipoDeVacacion{}, Fecha(2026, 9, 1))
+
+	if saldo.ColaboradorID != colaborador {
+		t.Fatalf("ColaboradorID = %s, esperado %s", saldo.ColaboradorID, colaborador)
+	}
+	if len(saldo.PorTipo) != 0 {
+		t.Fatalf("esperaba PorTipo vacío, dio %d entradas", len(saldo.PorTipo))
+	}
+	if !saldo.Total().Equal(decimal.Zero) {
+		t.Fatalf("Total = %s, esperado 0", saldo.Total())
+	}
+}
+
+// El colaborador jamás se infiere del contenido de las bolsas.
+func TestProyectarSaldo_NoInfiereElColaboradorDeLasBolsas(t *testing.T) {
+	colaborador, otro := uuid.New(), uuid.New()
+	tipoID := uuid.New()
+	viva := Fecha(2028, 1, 1)
+
+	bolsaAjena := bolsaDeTipo(tipoID, &viva, "18")
+	bolsaAjena.Otorgamiento.ColaboradorID = otro
+
+	saldo := ProyectarSaldo(colaborador, []Bolsa{bolsaAjena},
+		map[uuid.UUID]TipoDeVacacion{tipoID: {ID: tipoID, Codigo: "FERIADO_LEGAL"}}, Fecha(2026, 9, 1))
+
+	if saldo.ColaboradorID != colaborador {
+		t.Fatalf("ColaboradorID = %s, esperado el recibido %s (no el de la bolsa %s)",
+			saldo.ColaboradorID, colaborador, otro)
 	}
 }
