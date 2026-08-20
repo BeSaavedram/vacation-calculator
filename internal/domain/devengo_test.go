@@ -191,3 +191,40 @@ func TestDevengo_IngresoEn29DeFebreroDevengaUnaVezPorAnio(t *testing.T) {
 		}
 	}
 }
+
+// Los jobs se reejecutan contra fechas arbitrarias del pasado: evaluar a alguien
+// fuera de su ventana de empleo es una entrada rutinaria, no un error.
+func TestDevengo_RespetaLaVentanaDeEmpleo(t *testing.T) {
+	termino := Fecha(2026, 4, 15)
+	desvinculado := Colaborador{FechaIngreso: Fecha(2017, 4, 15), FechaTermino: &termino}
+
+	if _, hubo := Devengar(tipoLegal(), desvinculado, Fecha(2026, 4, 15)); hubo {
+		t.Fatal("no debe devengar el día del término: la relación ya terminó")
+	}
+	if _, hubo := Devengar(tipoLegal(), desvinculado, Fecha(2027, 4, 15)); hubo {
+		t.Fatal("no debe devengar un aniversario posterior al término")
+	}
+
+	sigueVigente := Fecha(2026, 4, 16)
+	activo := Colaborador{FechaIngreso: Fecha(2017, 4, 15), FechaTermino: &sigueVigente}
+	if _, hubo := Devengar(tipoLegal(), activo, Fecha(2026, 4, 15)); !hubo {
+		t.Fatal("el día anterior al término todavía devenga")
+	}
+}
+
+func TestDevengo_NoDevengaAntesDelIngreso(t *testing.T) {
+	c := Colaborador{FechaIngreso: Fecha(2026, 6, 1)}
+
+	if _, hubo := Devengar(tipoLegal(), c, Fecha(2026, 1, 15)); hubo {
+		t.Fatal("no debe devengar antes de la fecha de ingreso")
+	}
+
+	administrativo := TipoDeVacacion{
+		PoliticaDevengo:     DevengoAnioCalendario,
+		PoliticaVencimiento: VencimientoFinDeAnio,
+		Parametros:          Parametros{DiasBase: "6"},
+	}
+	if _, hubo := Devengar(administrativo, c, Fecha(2026, 1, 1)); hubo {
+		t.Fatal("el año calendario tampoco devenga antes del ingreso")
+	}
+}

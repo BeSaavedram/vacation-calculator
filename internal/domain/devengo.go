@@ -28,6 +28,13 @@ type ResultadoDevengo struct {
 func Devengar(tipo TipoDeVacacion, c Colaborador, fecha time.Time) (ResultadoDevengo, bool) {
 	fecha = SoloFecha(fecha)
 
+	// Fuera de la ventana de empleo no se devenga nada. No es un error: los jobs
+	// se reejecutan a propósito contra fechas arbitrarias del pasado, así que
+	// evaluar a alguien antes de su ingreso o después de su término es rutina.
+	if !dentroDeLaVentanaDeEmpleo(c, fecha) {
+		return ResultadoDevengo{}, false
+	}
+
 	switch tipo.PoliticaDevengo {
 	case DevengoAniversarioLegal:
 		return devengarAniversario(tipo, c, fecha)
@@ -65,9 +72,6 @@ func devengarAnioCalendario(tipo TipoDeVacacion, c Colaborador, fecha time.Time)
 	if fecha.Month() != time.January || fecha.Day() != 1 {
 		return ResultadoDevengo{}, false
 	}
-	if fecha.Before(SoloFecha(c.FechaIngreso)) {
-		return ResultadoDevengo{}, false
-	}
 
 	base := tipo.Parametros.DiasBaseDecimal()
 	return ResultadoDevengo{
@@ -79,6 +83,19 @@ func devengarAnioCalendario(tipo TipoDeVacacion, c Colaborador, fecha time.Time)
 		DevengadoEl:    fecha,
 		Detalle:        fmt.Sprintf("año calendario %d: %s días", fecha.Year(), base),
 	}, true
+}
+
+// dentroDeLaVentanaDeEmpleo indica si la fecha cae dentro de la relación
+// laboral. El término es EXCLUSIVO: el día en que la relación termina ya no
+// devenga, igual que vence_el en las bolsas.
+func dentroDeLaVentanaDeEmpleo(c Colaborador, fecha time.Time) bool {
+	if fecha.Before(SoloFecha(c.FechaIngreso)) {
+		return false
+	}
+	if c.FechaTermino != nil && !fecha.Before(SoloFecha(*c.FechaTermino)) {
+		return false
+	}
+	return true
 }
 
 // DiasProgresivos aplica la regla de feriado progresivo. Umbral, antigüedad

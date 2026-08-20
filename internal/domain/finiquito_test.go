@@ -120,3 +120,66 @@ func bolsaConMovimientos(tipoID uuid.UUID, vence *time.Time, otorgado, consumido
 		},
 	}
 }
+
+// Nueve días devengados para alguien que todavía no entraba: el job se reejecuta
+// contra fechas pasadas, así que esta entrada es rutinaria.
+func TestProporcional_AntesDelIngresoEsCero(t *testing.T) {
+	c := Colaborador{FechaIngreso: Fecha(2026, 6, 1)}
+
+	p := CalcularProporcional(c, Fecha(2026, 1, 15))
+
+	if !p.Dias.Equal(decimal.Zero) {
+		t.Fatalf("Dias = %s, esperado 0: el colaborador aún no ingresaba", p.Dias)
+	}
+	if p.MesesCompletos != 0 || p.DiasRestantes != 0 {
+		t.Fatalf("MesesCompletos = %d y DiasRestantes = %d, esperado 0 y 0",
+			p.MesesCompletos, p.DiasRestantes)
+	}
+	if !p.PeriodoDesde.Equal(Fecha(2026, 6, 1)) || !p.Hasta.Equal(Fecha(2026, 6, 1)) {
+		t.Fatalf("período = %s..%s, esperado la ventana vacía en la fecha de ingreso",
+			p.PeriodoDesde.Format("2006-01-02"), p.Hasta.Format("2006-01-02"))
+	}
+}
+
+func TestProporcional_JustoEnElIngresoEsCero(t *testing.T) {
+	c := Colaborador{FechaIngreso: Fecha(2026, 6, 1)}
+
+	if p := CalcularProporcional(c, Fecha(2026, 6, 1)); !p.Dias.Equal(decimal.Zero) {
+		t.Fatalf("Dias = %s, esperado 0 el día mismo del ingreso", p.Dias)
+	}
+}
+
+// Después del término el derecho dejó de crecer: se calcula hasta esa fecha.
+func TestProporcional_SeDetieneEnElTermino(t *testing.T) {
+	termino := Fecha(2026, 9, 25)
+	c := Colaborador{FechaIngreso: Fecha(2018, 1, 1), FechaTermino: &termino}
+
+	enElTermino := CalcularProporcional(c, Fecha(2026, 9, 25))
+	muyDespues := CalcularProporcional(c, Fecha(2026, 12, 31))
+
+	if !muyDespues.Dias.Equal(enElTermino.Dias) {
+		t.Fatalf("Dias después del término = %s, esperado %s: el derecho dejó de crecer",
+			muyDespues.Dias, enElTermino.Dias)
+	}
+	if !muyDespues.Dias.Equal(decimal.RequireFromString("11")) {
+		t.Fatalf("Dias = %s, esperado 11.00", muyDespues.Dias)
+	}
+	if !muyDespues.Hasta.Equal(termino) {
+		t.Fatalf("Hasta = %s, esperado el término %s",
+			muyDespues.Hasta.Format("2006-01-02"), termino.Format("2006-01-02"))
+	}
+}
+
+// FIX 7: AddDate desbordaba el fin de mes y RRHH veía "1 mes y −2 días".
+func TestProporcional_DiasRestantesNuncaEsNegativo(t *testing.T) {
+	c := Colaborador{FechaIngreso: Fecha(2020, 1, 31)}
+
+	p := CalcularProporcional(c, Fecha(2026, 3, 1))
+
+	if p.DiasRestantes < 0 {
+		t.Fatalf("DiasRestantes = %d: nunca debe ser negativo", p.DiasRestantes)
+	}
+	if p.MesesCompletos != 1 {
+		t.Fatalf("MesesCompletos = %d, esperado 1", p.MesesCompletos)
+	}
+}

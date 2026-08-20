@@ -7,9 +7,13 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// DiasPorMes es la tasa de devengo continuo: 15 días hábiles al año divididos
-// en 12 meses.
-var DiasPorMes = decimal.RequireFromString("1.25")
+// diasPorMes es la tasa de devengo continuo: 15 días hábiles al año divididos en
+// 12 meses.
+//
+// Es una constante de la especificación, NO se deriva de DiasBase. Un tipo
+// configurado con un DiasBase distinto de 15 no haría variar esta tasa: el
+// proporcional de finiquito seguiría prorrateando 1,25 al mes.
+var diasPorMes = decimal.RequireFromString("1.25")
 
 var treinta = decimal.NewFromInt(30)
 
@@ -29,14 +33,38 @@ type Proporcional struct {
 // en curso, prorrateando la fracción sobre base 30.
 func CalcularProporcional(c Colaborador, fecha time.Time) Proporcional {
 	fecha = SoloFecha(fecha)
-	inicio := UltimoAniversario(c.FechaIngreso, fecha)
+	ingreso := SoloFecha(c.FechaIngreso)
+
+	// Antes del ingreso no hay derecho que devengar. Es una entrada normal (los
+	// jobs se reejecutan contra fechas pasadas), así que se devuelve un
+	// proporcional en cero con la ventana vacía, no un error.
+	if fecha.Before(ingreso) {
+		return Proporcional{PeriodoDesde: ingreso, Hasta: ingreso, Dias: decimal.Zero}
+	}
+
+	// Después del término el derecho dejó de crecer: se calcula hasta esa fecha,
+	// no hasta la fecha de consulta.
+	if c.FechaTermino != nil {
+		if termino := SoloFecha(*c.FechaTermino); fecha.After(termino) {
+			fecha = termino
+		}
+	}
+
+	inicio := UltimoAniversario(ingreso, fecha)
 
 	meses := MesesEntre(inicio, fecha)
 	baseDelMes := inicio.AddDate(0, meses, 0)
 	dias := DiasEntre(baseDelMes, fecha)
+	if dias < 0 {
+		// AddDate desborda al mes siguiente cuando el aniversario cae en un fin
+		// de mes más largo que el mes destino (un ingreso el 31 de enero da un
+		// "31 de febrero" que salta a marzo). Sin este recorte, RRHH leería
+		// "1 mes y −2 días" en la pantalla de finiquito.
+		dias = 0
+	}
 
-	porMeses := DiasPorMes.Mul(decimal.NewFromInt(int64(meses)))
-	porDias := decimal.NewFromInt(int64(dias)).Div(treinta).Mul(DiasPorMes)
+	porMeses := diasPorMes.Mul(decimal.NewFromInt(int64(meses)))
+	porDias := decimal.NewFromInt(int64(dias)).Div(treinta).Mul(diasPorMes)
 
 	return Proporcional{
 		PeriodoDesde:   inicio,
