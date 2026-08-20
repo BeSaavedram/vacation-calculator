@@ -4487,6 +4487,12 @@ git commit -m "feat(api): arranque del servidor"
 
 La semilla no inserta saldos: **corre el motor** sobre la historia completa de cada colaborador. Esa diferencia es lo que hace que el ledger de Carlos sirva para explicar el sistema en vez de solo ilustrarlo.
 
+> **El orden cronológico es parte del requisito, no un detalle de implementación.** Las solicitudes históricas deben intercalarse *dentro* del recorrido, no aplicarse después. Si se crean al final, con el reloj ya devuelto a hoy, `AsignarConsumo` filtra las bolsas por la vigencia de hoy y carga el consumo contra bolsas que en esa fecha todavía no existían —vacaciones de febrero descontadas de días otorgados en abril— y las bolsas antiguas vencen intactas en vez de vencer por su remanente real.
+>
+> En cada fecha del recorrido, con `svc.Hoy` fijado a esa fecha, el orden debe ser: **devengo → solicitudes de ese día → vencimiento**. El vencimiento va último porque `vence_el` es exclusivo: una bolsa que vence el día *f* ya no sirve el día *f*, pero sí sirvió el día anterior.
+>
+> Invariante que debe verificarse tras sembrar: ningún `CONSUMPTION` puede estar cargado a un otorgamiento cuyo `devengado_el` sea posterior a la `fecha_efectiva` del movimiento.
+
 **Files:**
 - Create: `cmd/seed/main.go`, `internal/store/feriados.go`
 
