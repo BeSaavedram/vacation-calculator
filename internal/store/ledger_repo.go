@@ -165,6 +165,15 @@ func CrearOtorgamiento(ctx context.Context, q Querier, o domain.Otorgamiento) (u
 // Esto es lo que hace que reejecutar un job sea seguro: la segunda corrida
 // colisiona contra el índice único y no duplica movimientos.
 func InsertarMovimiento(ctx context.Context, q Querier, m domain.Movimiento) (bool, error) {
+	// InsertarMovimiento es el único punto por el que un movimiento entra al
+	// ledger, y el ledger nunca se actualiza ni se borra (la base solo otorga
+	// SELECT e INSERT sobre esta tabla). Un signo equivocado no se puede
+	// corregir después, así que se valida acá, una sola vez, para todo llamador
+	// presente y futuro.
+	if err := m.Validar(); err != nil {
+		return false, err
+	}
+
 	tag, err := q.Exec(ctx, `
 		INSERT INTO movimiento (empresa_id, otorgamiento_id, solicitud_id, cantidad,
 			clase, fecha_efectiva, actor_id, motivo, clave_idempotencia, reversa_de)
