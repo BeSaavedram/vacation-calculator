@@ -105,3 +105,38 @@ func TestAsignarConsumo_SaldoInsuficiente(t *testing.T) {
 		t.Fatalf("esperaba ErrSaldoInsuficiente, dio %v", err)
 	}
 }
+
+func TestAsignarConsumo_RepartEntreTresBolsas(t *testing.T) {
+	primera := Fecha(2026, 10, 1)
+	segunda := Fecha(2026, 12, 31)
+	tercera := Fecha(2027, 4, 15)
+
+	bolsas := []Bolsa{
+		bolsa(&tercera, "17", 10), // desordenadas a propósito
+		bolsa(&primera, "2", 10),
+		bolsa(&segunda, "3", 10),
+	}
+
+	asignaciones, err := AsignarConsumo(bolsas, decimal.RequireFromString("8"), Fecha(2026, 9, 1))
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+
+	if len(asignaciones) != 3 {
+		t.Fatalf("esperaba 3 asignaciones, dio %d", len(asignaciones))
+	}
+	esperado := []string{"2", "3", "3"}
+	orden := []uuid.UUID{
+		bolsas[1].Otorgamiento.ID,
+		bolsas[2].Otorgamiento.ID,
+		bolsas[0].Otorgamiento.ID,
+	}
+	for i, a := range asignaciones {
+		if a.OtorgamientoID != orden[i] {
+			t.Fatalf("asignación %d salió de la bolsa equivocada", i)
+		}
+		if !a.Dias.Equal(decimal.RequireFromString(esperado[i])) {
+			t.Fatalf("asignación %d = %s, esperado %s", i, a.Dias, esperado[i])
+		}
+	}
+}

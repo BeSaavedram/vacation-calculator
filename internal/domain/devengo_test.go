@@ -149,3 +149,21 @@ func TestDevengo_ManualNuncaDevengaSolo(t *testing.T) {
 		t.Fatal("un tipo manual nunca devenga automáticamente")
 	}
 }
+
+func TestDevengo_ProgresivoJustoSobreLaAntiguedadMinima(t *testing.T) {
+	// Antigüedad de exactamente 36 meses, el mínimo continuo exigido, con
+	// experiencia previa suficiente para cruzar el umbral de 120 meses totales.
+	// Es el borde superior de la regla de antigüedad: floor(3/3) = 1 día extra.
+	justoEnElBorde := Colaborador{
+		FechaIngreso:           Fecha(2023, 4, 15),
+		MesesExperienciaPrevia: 84,
+	}
+
+	res, hubo := Devengar(tipoLegal(), justoEnElBorde, Fecha(2026, 4, 15))
+	if !hubo {
+		t.Fatal("debía devengar")
+	}
+	if !res.Dias.Equal(decimal.RequireFromString("16")) {
+		t.Fatalf("Dias = %s, esperado 16: 36 meses de antigüedad exactos ya habilitan un tramo", res.Dias)
+	}
+}
