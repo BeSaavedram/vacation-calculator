@@ -22,6 +22,8 @@
 
 **Docker.** El CLI de Docker Desktop no está en el `PATH` de zsh. El Makefile lo agrega explícitamente.
 
+Cuidado con una trampa de macOS: `/usr/bin/make` es GNU Make 3.81, y esa versión ejecuta directamente —sin pasar por `/bin/sh`— cualquier línea de receta que no contenga metacaracteres de shell, ignorando el `PATH` exportado en el Makefile. Por eso las dos líneas que invocan `docker` llevan un `;` al final: fuerza que pasen por el shell, que sí ve el `PATH` correcto. Con GNU Make 4.x el `;` es inocuo.
+
 ---
 
 ## Estructura de archivos
@@ -120,13 +122,13 @@ export
 .PHONY: db-up db-down migrate seed api web test demo-reset
 
 db-up:
-	docker compose up -d postgres
+	docker compose up -d postgres;
 	@echo "esperando a postgres..."
 	@until docker compose exec -T postgres pg_isready -U vacaciones -d vacaciones >/dev/null 2>&1; do sleep 1; done
 	@echo "postgres listo en localhost:5433"
 
 db-down:
-	docker compose down -v
+	docker compose down -v;
 
 migrate:
 	go run ./cmd/migrate
