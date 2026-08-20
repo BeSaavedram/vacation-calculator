@@ -122,6 +122,8 @@ make web        # frontend en http://localhost:3000
 
 Para empezar de cero en cualquier momento: `make demo-reset`.
 
+> Si el API estaba corriendo, reinícialo después de un `demo-reset`. Resuelve el identificador de la empresa una sola vez al arrancar, así que un proceso viejo queda apuntando a datos que ya no existen y responde listas vacías en vez de un error — que es más confuso que fallar.
+
 Los tests del dominio no necesitan base de datos:
 
 ```bash
