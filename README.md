@@ -152,6 +152,87 @@ Por eso su historial muestra el efecto de las progresivas en dos escalones:
 
 Y como sus vacaciones se consumen en el punto cronológico correcto, las bolsas antiguas vencen por su **remanente parcial** y no intactas: los 10 días que tomó en febrero salen FIFO de la bolsa más próxima a vencer, que muere después con −5,00 en lugar de −15,00.
 
+## Guion de uso
+
+Con el API y el frontend arriba, abre `http://localhost:3000`. No hay login: el desplegable **"Ver como"** del header cambia el usuario activo, y el rol decide qué se ve. Todo el recorrido siguiente son ocho pasos y no requiere tocar la base de datos.
+
+### 1 · El colaborador consulta su saldo
+
+Selecciona **Carlos Rojas**. Verás sus tarjetas de disponible por tipo y, más abajo, su historial completo.
+
+En ese historial está el argumento central: cada línea es un movimiento inmutable, y el número de la tarjeta de arriba es su suma. Fíjate en la columna de motivo — dice *"aniversario 8: 15 días base + 2 progresivos"*. El sistema no solo calcula el saldo, explica cómo llegó a él.
+
+Recorre la columna de días: 15 en cada aniversario hasta 2024, luego **17** y después **18**. Ese salto es el feriado progresivo entrando en vigencia, y quedó escrito en el ledger con su fecha.
+
+Fíjate también en los `EXPIRATION` de **−5,00** y **−11,00**. No son bolsas intactas: son el remanente que quedó después de que Carlos usara parte de esos días. Es el tope de dos períodos funcionando sobre lo que realmente sobraba.
+
+### 2 · El colaborador pide vacaciones
+
+En **Solicitar vacaciones**, elige un tipo y un rango de fechas. Antes de enviar, la pantalla te dice cuántos **días hábiles** descuenta ese rango frente a cuántos días corridos abarca. Ese número lo calcula el servidor contra el calendario de feriados; el navegador no lo adivina.
+
+Prueba con un rango que cruce el 18 y 19 de septiembre y verás la diferencia.
+
+Envía la solicitud. Queda **PENDIENTE** y todavía no toca el ledger — una intención no es un hecho consumado. Pero fíjate en la tarjeta de saldo: los días ya aparecen como comprometidos, así que no puedes gastarlos dos veces.
+
+### 3 · RRHH aprueba
+
+Cambia el selector a **Marta Silva**. La navegación cambia: aparecen Colaboradores, Solicitudes y Tipos de vacación.
+
+Entra en **Solicitudes**, encontrarás la de Carlos pendiente. Apruébala.
+
+Vuelve a **Carlos** con el selector. Su saldo bajó y en el historial hay uno o más `CONSUMPTION` nuevos. Si el consumo se repartió entre varias bolsas, verás **una línea por bolsa**: el sistema descuenta primero los días que vencen antes, y deja registro de dónde salió cada día.
+
+### 4 · Lo que el colaborador no ve
+
+Este paso es el más rápido de mostrar y el que más se entiende.
+
+Con **Marta**, entra en Colaboradores → Carlos → *Ver detalle*. Aparece una tarjeta extra: **Devengado no otorgado**, y un bloque **"Si se desvincula hoy"** con el desglose del feriado proporcional, fórmula incluida.
+
+Ahora cambia el selector a **Carlos** y mira su propia pantalla: esas dos cosas no están. No es que estén ocultas en el navegador — el API simplemente no las envía cuando quien pregunta no es RRHH.
+
+### 5 · RRHH define un tipo nuevo, sin desplegar código
+
+Con **Marta**, entra en **Tipos de vacación**. Verás los dos tipos configurados con sus parámetros en crudo: umbrales, cadencias, número de períodos. Eso que se ve como JSON es lo que en otra implementación sería una cadena de `if`.
+
+El formulario de abajo viene precargado con **"Días por rendimiento"**. Presiona *Crear tipo*. Aparece en la tabla de inmediato, listo para usarse. No hubo despliegue.
+
+### 6 · RRHH carga un saldo especial
+
+Entra en Colaboradores → **Ana Fuentes** → *Ver detalle* → **Otorgar saldo especial**. Elige el tipo recién creado, pon 2 días y escribe un motivo — el motivo es obligatorio, un movimiento sin explicación es justamente el problema que este sistema resuelve.
+
+Cambia el selector a **Ana**: tiene una tarjeta nueva con esos 2 días, y en su historial el movimiento aparece con el motivo que escribiste y con *Marta Silva* como autora.
+
+### 7 · Reconstruir el saldo a una fecha pasada
+
+Con **Marta**, en el detalle de Carlos, usa **"Reconstruir el saldo a la fecha"** y pon una fecha de hace dos años. El historial se recorta a lo que se sabía entonces.
+
+Esto no es un filtro de interfaz: cada movimiento guarda cuándo ocurrió el hecho y cuándo se registró, así que el sistema puede responder *"¿qué sabíamos el 3 de marzo?"* y no solo *"¿qué es cierto hoy?"*.
+
+### 8 · El saldo no se puede editar
+
+El cierre. En una terminal:
+
+```bash
+docker compose exec -T postgres psql -U vacaciones_app -d vacaciones -c "UPDATE movimiento SET cantidad = 0;"
+```
+
+```
+ERROR:  permission denied for table movimiento
+```
+
+No es una validación de la aplicación: es el motor de base de datos. El rol con el que se conecta el API tiene `SELECT` e `INSERT` sobre el ledger y nada más. Aunque alguien escribiera un `UPDATE` por error, no correría.
+
+### Los procesos automáticos
+
+El devengo y el vencimiento no tienen pantalla — en producción los dispara un scheduler. Se pueden ejecutar a mano para mostrarlos:
+
+```bash
+ID_RRHH=$(curl -s http://localhost:8080/api/usuarios | grep -o '"id":"[^"]*","nombre":"Marta[^}]*' | cut -d'"' -f4)
+curl -X POST -H "X-Actor-Id: $ID_RRHH" "http://localhost:8080/api/jobs/devengo?fecha=2026-04-15"
+```
+
+Córrelo dos veces. La respuesta reporta `"creados": 0, "ya_existian": 1` y el número de filas en `movimiento` no se mueve: el job es idempotente. Y acepta una fecha objetivo, así que un día que no corrió se recupera reejecutándolo con esa fecha.
+
 ## API
 
 Todas las llamadas llevan el header `X-Actor-Id`. El rol del actor determina qué datos se devuelven: un colaborador ve solo su disponible; RRHH ve además el devengado no otorgado y el proporcional de finiquito.
