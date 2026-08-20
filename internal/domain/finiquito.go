@@ -72,10 +72,11 @@ func CalcularFiniquito(
 		if !pagablePorTipo[b.Otorgamiento.TipoID] {
 			continue
 		}
-		if !b.VigenteAl(fecha) {
+		remanente, aporta := disponibleDeBolsa(b, fecha)
+		if !aporta {
 			continue
 		}
-		disponible = disponible.Add(b.Remanente())
+		disponible = disponible.Add(remanente)
 	}
 
 	return Finiquito{

@@ -80,3 +80,43 @@ func bolsaDeTipo(tipoID uuid.UUID, vence *time.Time, remanente string) Bolsa {
 		},
 	}
 }
+
+// Una bolsa con remanente negativo es una anomalía de datos. Saldo y finiquito
+// deben tratarla igual: si dieran números distintos, RRHH vería dos cifras para
+// la misma persona el mismo día.
+func TestDisponible_SaldoYFiniquitoCoinciden(t *testing.T) {
+	c := Colaborador{FechaIngreso: Fecha(2018, 1, 1)}
+	tipoID := uuid.New()
+	vence := Fecha(2028, 1, 1)
+
+	sana := bolsaDeTipo(tipoID, &vence, "5")
+	anomala := bolsaConMovimientos(tipoID, &vence, "3", "-5") // remanente -2
+
+	bolsas := []Bolsa{sana, anomala}
+	tipos := map[uuid.UUID]TipoDeVacacion{tipoID: {ID: tipoID, Codigo: "FERIADO_LEGAL"}}
+
+	saldo := ProyectarSaldo(c.ID, bolsas, tipos, Fecha(2026, 9, 25))
+	finiquito := CalcularFiniquito(c, bolsas, map[uuid.UUID]bool{tipoID: true}, Fecha(2026, 9, 25))
+
+	if !saldo.Total().Equal(finiquito.DisponiblePagable) {
+		t.Fatalf("Saldo.Total() = %s pero Finiquito.DisponiblePagable = %s: deben ser el mismo número",
+			saldo.Total(), finiquito.DisponiblePagable)
+	}
+	if !saldo.Total().Equal(decimal.RequireFromString("5")) {
+		t.Fatalf("disponible = %s, esperado 5: la bolsa anómala se descarta, no se netea",
+			saldo.Total())
+	}
+}
+
+// bolsaConMovimientos arma una bolsa con un otorgamiento y su consumo, para
+// poder construir remanentes negativos.
+func bolsaConMovimientos(tipoID uuid.UUID, vence *time.Time, otorgado, consumido string) Bolsa {
+	id := uuid.New()
+	return Bolsa{
+		Otorgamiento: Otorgamiento{ID: id, TipoID: tipoID, VenceEl: vence},
+		Movimientos: []Movimiento{
+			{OtorgamientoID: id, Clase: ClaseAccrual, Cantidad: decimal.RequireFromString(otorgado)},
+			{OtorgamientoID: id, Clase: ClaseConsumption, Cantidad: decimal.RequireFromString(consumido)},
+		},
+	}
+}

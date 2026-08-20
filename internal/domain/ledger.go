@@ -54,13 +54,39 @@ type Bolsa struct {
 	Prioridad int
 }
 
-// Remanente es lo que queda en la bolsa: la suma con signo de sus movimientos.
+// Remanente es lo que queda en la bolsa: la suma con signo de TODOS sus
+// movimientos, sin filtrar por fecha.
+//
+// Incluir los consumos con fecha efectiva futura es deliberado: unas vacaciones
+// ya aprobadas para el mes que viene están comprometidas y no pueden volver a
+// gastarse. "Lo que todavía puedo tomarme" es justamente el ledger completo.
 func (b Bolsa) Remanente() decimal.Decimal {
 	total := decimal.Zero
 	for _, m := range b.Movimientos {
 		total = total.Add(m.Cantidad)
 	}
 	return total
+}
+
+// disponibleDeBolsa dice cuánto aporta una bolsa al disponible, y si aporta.
+//
+// Es la ÚNICA definición de "disponible" del dominio: la usan tanto la
+// proyección de saldo como el finiquito, para que RRHH no pueda ver dos cifras
+// distintas de la misma persona el mismo día.
+//
+// Una bolsa aporta solo si está vigente y su remanente es positivo. Un remanente
+// negativo es una ANOMALÍA de datos (se consumió más de lo otorgado), no un
+// descuento legítimo: netearlo contra las bolsas sanas haría que el total
+// cuadrara por casualidad y taparía el problema justo donde hay que verlo.
+func disponibleDeBolsa(b Bolsa, alDia time.Time) (decimal.Decimal, bool) {
+	if !b.VigenteAl(alDia) {
+		return decimal.Zero, false
+	}
+	remanente := b.Remanente()
+	if remanente.LessThanOrEqual(decimal.Zero) {
+		return decimal.Zero, false
+	}
+	return remanente, true
 }
 
 // VigenteAl indica si la bolsa todavía puede consumirse en la fecha dada.

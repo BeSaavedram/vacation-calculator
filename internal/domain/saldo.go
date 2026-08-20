@@ -69,11 +69,8 @@ func ProyectarSaldo(
 	porTipo := make(map[uuid.UUID]*SaldoPorTipo)
 
 	for _, b := range bolsas {
-		if !b.VigenteAl(alDia) {
-			continue
-		}
-		remanente := b.Remanente()
-		if remanente.LessThanOrEqual(decimal.Zero) {
+		remanente, aporta := disponibleDeBolsa(b, alDia)
+		if !aporta {
 			continue
 		}
 
