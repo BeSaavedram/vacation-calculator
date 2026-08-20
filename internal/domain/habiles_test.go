@@ -45,3 +45,24 @@ func TestContarHabilesRangoDeUnDia(t *testing.T) {
 		t.Fatalf("un lunes solo debe contar 1 día hábil, dio %d", got)
 	}
 }
+
+// Los feriados llegan desde la base y el calendario debe dar el mismo resultado
+// venga la fecha en UTC o con zona.
+func TestCalendario_NoDependeDeLaZona(t *testing.T) {
+	zona := time.FixedZone("test", -4*3600)
+	feriadoUTC := Fecha(2026, 9, 18)
+	feriadoConZona := time.Date(2026, 9, 18, 0, 0, 0, 0, zona)
+
+	conZona := NuevoCalendario([]time.Time{feriadoConZona})
+	enUTC := NuevoCalendario([]time.Time{feriadoUTC})
+
+	if conZona.EsHabil(feriadoUTC) {
+		t.Fatal("un feriado cargado con zona debe seguir siendo inhábil")
+	}
+	if enUTC.EsHabil(feriadoConZona) {
+		t.Fatal("consultar con zona un feriado cargado en UTC debe dar inhábil")
+	}
+	if got, esperado := conZona.EsHabil(feriadoConZona), enUTC.EsHabil(feriadoUTC); got != esperado {
+		t.Fatalf("EsHabil con zona = %v, en UTC = %v: deben coincidir", got, esperado)
+	}
+}

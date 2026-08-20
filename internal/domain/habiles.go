@@ -13,7 +13,7 @@ type Calendario struct {
 func NuevoCalendario(feriados []time.Time) *Calendario {
 	c := &Calendario{feriados: make(map[string]struct{}, len(feriados))}
 	for _, f := range feriados {
-		c.feriados[f.Format("2006-01-02")] = struct{}{}
+		c.feriados[claveDeDia(f)] = struct{}{}
 	}
 	return c
 }
@@ -24,8 +24,15 @@ func (c *Calendario) EsHabil(fecha time.Time) bool {
 	case time.Saturday, time.Sunday:
 		return false
 	}
-	_, esFeriado := c.feriados[fecha.Format("2006-01-02")]
+	_, esFeriado := c.feriados[claveDeDia(fecha)]
 	return !esFeriado
+}
+
+// claveDeDia normaliza antes de formatear, para que la carga de feriados y la
+// consulta construyan la clave del mismo modo aunque los time.Time vengan de la
+// base con zona u hora.
+func claveDeDia(fecha time.Time) string {
+	return SoloFecha(fecha).Format("2006-01-02")
 }
 
 // ContarHabiles cuenta los días hábiles del rango, con ambos extremos incluidos.

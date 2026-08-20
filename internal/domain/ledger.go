@@ -69,18 +69,22 @@ func (b Bolsa) VigenteAl(fecha time.Time) bool {
 	if b.Otorgamiento.VenceEl == nil {
 		return true
 	}
-	return SoloFecha(fecha).Before(*b.Otorgamiento.VenceEl)
+	// Ambos lados normalizados: vence_el viene de la base y puede traer zona.
+	// Comparar contra el instante crudo hacía que una bolsa ya vencida se
+	// reportara como usable.
+	return SoloFecha(fecha).Before(SoloFecha(*b.Otorgamiento.VenceEl))
 }
 
 // ClaveIdempotencia construye la clave única que impide duplicar un movimiento
 // automático. Es UNIQUE en base de datos: reejecutar un job no duplica nada
 // porque el INSERT colisiona.
 func ClaveIdempotencia(clase ClaseMovimiento, colaboradorID, tipoID uuid.UUID, periodo time.Time) string {
-	return fmt.Sprintf("%s:%s:%s:%s", clase, colaboradorID, tipoID, periodo.Format("2006-01-02"))
+	return fmt.Sprintf("%s:%s:%s:%s", clase, colaboradorID, tipoID,
+		SoloFecha(periodo).Format("2006-01-02"))
 }
 
 // ClaveIdempotenciaBolsa construye la clave para un movimiento que se refiere a
 // una bolsa concreta, como el vencimiento.
 func ClaveIdempotenciaBolsa(clase ClaseMovimiento, otorgamientoID uuid.UUID, fecha time.Time) string {
-	return fmt.Sprintf("%s:%s:%s", clase, otorgamientoID, fecha.Format("2006-01-02"))
+	return fmt.Sprintf("%s:%s:%s", clase, otorgamientoID, SoloFecha(fecha).Format("2006-01-02"))
 }
