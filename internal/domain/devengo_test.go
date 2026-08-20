@@ -167,3 +167,27 @@ func TestDevengo_ProgresivoJustoSobreLaAntiguedadMinima(t *testing.T) {
 		t.Fatalf("Dias = %s, esperado 16: 36 meses de antigüedad exactos ya habilitan un tramo", res.Dias)
 	}
 }
+
+// Recorre día a día tres años completos: un ingreso del 29 de febrero debe
+// devengar exactamente una vez al año, no cero veces.
+func TestDevengo_IngresoEn29DeFebreroDevengaUnaVezPorAnio(t *testing.T) {
+	c := Colaborador{FechaIngreso: Fecha(2024, 2, 29)}
+
+	var fechas []time.Time
+	for d := Fecha(2025, 1, 1); !d.After(Fecha(2027, 12, 31)); d = d.AddDate(0, 0, 1) {
+		if _, hubo := Devengar(tipoLegal(), c, d); hubo {
+			fechas = append(fechas, d)
+		}
+	}
+
+	if len(fechas) != 3 {
+		t.Fatalf("esperaba 3 devengos entre 2025 y 2027, dio %d: %v", len(fechas), fechas)
+	}
+	esperadas := []time.Time{Fecha(2025, 2, 28), Fecha(2026, 2, 28), Fecha(2027, 2, 28)}
+	for i, e := range esperadas {
+		if !fechas[i].Equal(e) {
+			t.Fatalf("devengo %d = %s, esperado %s",
+				i, fechas[i].Format("2006-01-02"), e.Format("2006-01-02"))
+		}
+	}
+}

@@ -24,12 +24,44 @@ func MesesEntre(desde, hasta time.Time) int {
 	return meses
 }
 
+// aniversarioEnAnio devuelve el día en que cae el aniversario de ingreso dentro
+// del año dado.
+//
+// CONVENCIÓN DELIBERADA: el aniversario es el día del mes del ingreso, RECORTADO
+// al último día de ese mes cuando el mes del año destino es más corto. Un
+// ingreso del 29 de febrero cumple el 28 de febrero en los años comunes y el 29
+// en los bisiestos; nunca se corre al 1 de marzo. La alternativa (dejar que
+// time.Date desborde al mes siguiente) hacía que ese colaborador no cumpliera
+// años nunca, porque ningún día del año común coincidía con el 29 de febrero.
+//
+// El recorte solo importa para febrero: los meses de 30 días nunca son destino
+// de un ingreso del 31 porque el mes de ingreso es siempre el mismo.
+//
+// Es el único lugar donde se resuelve esta regla. UltimoAniversario y
+// EsAniversario la usan las dos, para que no puedan discrepar.
+func aniversarioEnAnio(ingreso time.Time, anio int) time.Time {
+	mes := ingreso.Month()
+	dia := ingreso.Day()
+	if ultimo := diasDelMes(anio, mes); dia > ultimo {
+		dia = ultimo
+	}
+	return Fecha(anio, mes, dia)
+}
+
+// diasDelMes devuelve cuántos días tiene el mes dado del año dado.
+func diasDelMes(anio int, mes time.Month) int {
+	// El día 0 del mes siguiente es el último día de este mes.
+	return time.Date(anio, mes+1, 0, 0, 0, 0, 0, time.UTC).Day()
+}
+
 // UltimoAniversario devuelve el aniversario de ingreso más reciente que ya
 // ocurrió a la fecha dada. Si la fecha ES el aniversario, devuelve esa fecha.
 func UltimoAniversario(ingreso, fecha time.Time) time.Time {
-	aniversario := Fecha(fecha.Year(), ingreso.Month(), ingreso.Day())
+	ingreso, fecha = SoloFecha(ingreso), SoloFecha(fecha)
+
+	aniversario := aniversarioEnAnio(ingreso, fecha.Year())
 	if aniversario.After(fecha) {
-		aniversario = aniversario.AddDate(-1, 0, 0)
+		aniversario = aniversarioEnAnio(ingreso, fecha.Year()-1)
 	}
 	return aniversario
 }
@@ -37,10 +69,12 @@ func UltimoAniversario(ingreso, fecha time.Time) time.Time {
 // EsAniversario indica si la fecha cae exactamente en un aniversario de
 // ingreso posterior al ingreso mismo.
 func EsAniversario(ingreso, fecha time.Time) bool {
+	ingreso, fecha = SoloFecha(ingreso), SoloFecha(fecha)
+
 	if !fecha.After(ingreso) {
 		return false
 	}
-	return fecha.Month() == ingreso.Month() && fecha.Day() == ingreso.Day()
+	return fecha.Equal(aniversarioEnAnio(ingreso, fecha.Year()))
 }
 
 // DiasEntre cuenta los días calendario entre dos fechas.
