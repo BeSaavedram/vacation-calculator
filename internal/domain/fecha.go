@@ -40,12 +40,30 @@ func MesesEntre(desde, hasta time.Time) int {
 // Es el único lugar donde se resuelve esta regla. UltimoAniversario y
 // EsAniversario la usan las dos, para que no puedan discrepar.
 func aniversarioEnAnio(ingreso time.Time, anio int) time.Time {
-	mes := ingreso.Month()
-	dia := ingreso.Day()
+	return fechaRecortada(anio, ingreso.Month(), ingreso.Day())
+}
+
+// fechaRecortada construye una fecha recortando el día al último del mes cuando
+// el mes destino es más corto. Es la ÚNICA implementación de la convención de
+// fin de mes: los aniversarios y los períodos mensuales la comparten para que
+// no puedan discrepar entre sí.
+func fechaRecortada(anio int, mes time.Month, dia int) time.Time {
 	if ultimo := diasDelMes(anio, mes); dia > ultimo {
 		dia = ultimo
 	}
 	return Fecha(anio, mes, dia)
+}
+
+// sumarMesesRecortando suma meses respetando la convención de fin de mes: un mes
+// después del 31 de enero es el 28 (o 29) de febrero, no el 3 de marzo.
+//
+// time.Time.AddDate normaliza el desborde hacia el mes siguiente, que es
+// justamente lo que esta función evita.
+func sumarMesesRecortando(fecha time.Time, meses int) time.Time {
+	// El día 1 existe en todos los meses, así que mover el mes desde ahí nunca
+	// desborda. El día real se aplica después, ya recortado.
+	primero := Fecha(fecha.Year(), fecha.Month(), 1).AddDate(0, meses, 0)
+	return fechaRecortada(primero.Year(), primero.Month(), fecha.Day())
 }
 
 // diasDelMes devuelve cuántos días tiene el mes dado del año dado.

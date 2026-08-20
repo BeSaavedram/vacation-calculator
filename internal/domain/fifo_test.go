@@ -176,3 +176,31 @@ func TestAsignarConsumo_DesempateDeterministaPorID(t *testing.T) {
 		}
 	}
 }
+
+// Dos bolsas que vencen el MISMO día calendario deben llegar al desempate por
+// ID aunque sus time.Time traigan zonas distintas: comparar instantes crudos
+// hacía que la zona decidiera el reparto.
+func TestAsignarConsumo_VencimientoComparadoPorFechaCalendario(t *testing.T) {
+	zona := time.FixedZone("test", -4*3600)
+	enUTC := Fecha(2027, 1, 1)
+	conZona := time.Date(2027, 1, 1, 0, 0, 0, 0, zona)
+
+	menor := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	mayor := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	ordenes := [][]Bolsa{
+		{bolsaConID(menor, &conZona, "5", 10), bolsaConID(mayor, &enUTC, "5", 10)},
+		{bolsaConID(mayor, &enUTC, "5", 10), bolsaConID(menor, &conZona, "5", 10)},
+	}
+
+	for i, bolsas := range ordenes {
+		asignaciones, err := AsignarConsumo(bolsas, decimal.RequireFromString("2"), Fecha(2026, 9, 1))
+		if err != nil {
+			t.Fatalf("orden %d: error inesperado: %v", i, err)
+		}
+		if asignaciones[0].OtorgamientoID != menor {
+			t.Fatalf("orden %d: consumió de %s, esperado %s: a igual fecha calendario decide el ID, no la zona",
+				i, asignaciones[0].OtorgamientoID, menor)
+		}
+	}
+}

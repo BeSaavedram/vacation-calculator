@@ -86,8 +86,15 @@ func ordenarFIFO(bolsas []Bolsa) {
 			return false
 		case vi != nil && vj == nil:
 			return true
-		case vi != nil && vj != nil && !vi.Equal(*vj):
-			return vi.Before(*vj)
+		case vi != nil && vj != nil:
+			// Se compara por fecha CALENDARIO: vence_el viene de la base y puede
+			// traer zona. Comparando instantes crudos, dos bolsas que vencen el
+			// mismo día nunca empataban y la zona decidía el reparto en vez del
+			// desempate por ID.
+			di, dj := SoloFecha(*vi), SoloFecha(*vj)
+			if !di.Equal(dj) {
+				return di.Before(dj)
+			}
 		}
 
 		if bolsas[i].Prioridad != bolsas[j].Prioridad {

@@ -183,3 +183,52 @@ func TestProporcional_DiasRestantesNuncaEsNegativo(t *testing.T) {
 		t.Fatalf("MesesCompletos = %d, esperado 1", p.MesesCompletos)
 	}
 }
+
+// La convención de fin de mes es la misma que la de los aniversarios: "un mes
+// después del 31 de enero" es el 28/29 de febrero, no el 3 de marzo. Sin esto,
+// AddDate desbordaba y los días del período en curso salían negativos o cero.
+func TestProporcional_FinDeMesUsaLaConvencionRecortada(t *testing.T) {
+	c := Colaborador{FechaIngreso: Fecha(2020, 1, 31)}
+
+	casos := []struct {
+		nombre               string
+		fecha                time.Time
+		meses, diasRestantes int
+		dias                 string
+	}{
+		// inicio = 2026-01-31; un mes recortado = 2026-02-28.
+		{"justo en el mes recortado", Fecha(2026, 2, 28), 0, 28, "1.17"},
+		{"un día después", Fecha(2026, 3, 1), 1, 1, "1.29"},
+		{"tres días después", Fecha(2026, 3, 3), 1, 3, "1.38"},
+	}
+	for _, caso := range casos {
+		t.Run(caso.nombre, func(t *testing.T) {
+			p := CalcularProporcional(c, caso.fecha)
+
+			if p.MesesCompletos != caso.meses {
+				t.Fatalf("MesesCompletos = %d, esperado %d", p.MesesCompletos, caso.meses)
+			}
+			if p.DiasRestantes != caso.diasRestantes {
+				t.Fatalf("DiasRestantes = %d, esperado %d", p.DiasRestantes, caso.diasRestantes)
+			}
+			if !p.Dias.Equal(decimal.RequireFromString(caso.dias)) {
+				t.Fatalf("Dias = %s, esperado %s", p.Dias, caso.dias)
+			}
+		})
+	}
+}
+
+// El año bisiesto usa el 29: la misma convención, resuelta en el mismo lugar.
+func TestProporcional_FinDeMesEnAnioBisiesto(t *testing.T) {
+	c := Colaborador{FechaIngreso: Fecha(2020, 1, 31)}
+
+	p := CalcularProporcional(c, Fecha(2028, 3, 1))
+
+	if p.MesesCompletos != 1 {
+		t.Fatalf("MesesCompletos = %d, esperado 1", p.MesesCompletos)
+	}
+	// inicio = 2028-01-31, un mes recortado = 2028-02-29, así que queda 1 día.
+	if p.DiasRestantes != 1 {
+		t.Fatalf("DiasRestantes = %d, esperado 1", p.DiasRestantes)
+	}
+}

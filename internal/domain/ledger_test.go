@@ -117,7 +117,7 @@ func TestMovimientoValidar(t *testing.T) {
 		{"saldo inicial positivo", ClaseOpening, "10", false},
 		{"saldo inicial negativo", ClaseOpening, "-10", true},
 		{"ajuste positivo", ClaseAdjustment, "2", false},
-		{"ajuste negativo", ClaseAdjustment, "-2", true},
+		{"ajuste negativo: una corrección puede quitar días", ClaseAdjustment, "-2", false},
 		{"consumo negativo", ClaseConsumption, "-5", false},
 		{"consumo positivo", ClaseConsumption, "5", true},
 		{"vencimiento negativo", ClaseExpiration, "-3", false},
@@ -129,6 +129,7 @@ func TestMovimientoValidar(t *testing.T) {
 		{"cero en accrual", ClaseAccrual, "0", true},
 		{"cero en consumo", ClaseConsumption, "0", true},
 		{"cero en reversal", ClaseReversal, "0", true},
+		{"cero en ajuste", ClaseAdjustment, "0", true},
 	}
 	for _, c := range casos {
 		t.Run(c.nombre, func(t *testing.T) {

@@ -53,13 +53,15 @@ func CalcularProporcional(c Colaborador, fecha time.Time) Proporcional {
 	inicio := UltimoAniversario(ingreso, fecha)
 
 	meses := MesesEntre(inicio, fecha)
-	baseDelMes := inicio.AddDate(0, meses, 0)
+	// Se recorta al fin de mes con la misma convención que los aniversarios: un
+	// mes después del 31 de enero es el 28 (o 29) de febrero. Con AddDate a
+	// secas el "31 de febrero" saltaba a marzo y los días del período en curso
+	// salían negativos, y RRHH leía "1 mes y −2 días" en el finiquito.
+	baseDelMes := sumarMesesRecortando(inicio, meses)
 	dias := DiasEntre(baseDelMes, fecha)
 	if dias < 0 {
-		// AddDate desborda al mes siguiente cuando el aniversario cae en un fin
-		// de mes más largo que el mes destino (un ingreso el 31 de enero da un
-		// "31 de febrero" que salta a marzo). Sin este recorte, RRHH leería
-		// "1 mes y −2 días" en la pantalla de finiquito.
+		// Con el recorte esto ya no debería ocurrir; queda como red de seguridad
+		// para que un día negativo nunca llegue a la pantalla de finiquito.
 		dias = 0
 	}
 

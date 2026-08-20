@@ -31,13 +31,21 @@ type Otorgamiento struct {
 // "¿qué es cierto hoy?".
 //
 // CONVENCIÓN DE SIGNOS — es lo que hace funcionar todo el ledger, porque
-// Remanente() suma con signo y no interpreta la clase:
+// Remanente() suma con signo y no interpreta la clase.
 //
-//	ACCRUAL, OPENING_BALANCE, ADJUSTMENT ....... Cantidad POSITIVA (suman días)
+// Clases de signo FIJO, porque la clase ya dice en qué dirección mueven el
+// saldo; el signo contrario solo puede ser un error de quien escribe:
+//
+//	ACCRUAL, OPENING_BALANCE ................... Cantidad POSITIVA (suman días)
 //	CONSUMPTION, EXPIRATION, SETTLEMENT_PAYOUT . Cantidad NEGATIVA (restan días)
-//	REVERSAL ................................... el signo opuesto al que revierte
 //
-// Cero nunca es válido: un movimiento sin efecto no se registra.
+// Clases de signo LIBRE, porque la dirección no está determinada por la clase
+// sino por el hecho que registran:
+//
+//	ADJUSTMENT ... una corrección de RRHH puede agregar días o quitarlos
+//	REVERSAL ..... refleja el movimiento que revierte, con el signo opuesto
+//
+// Cero nunca es válido en ninguna clase: un movimiento sin efecto no se registra.
 //
 // Un signo equivocado no se puede corregir reejecutando nada, así que Validar()
 // debe llamarse antes de persistir cualquier movimiento.
@@ -64,7 +72,7 @@ func (m Movimiento) Validar() error {
 	}
 
 	switch m.Clase {
-	case ClaseAccrual, ClaseOpening, ClaseAdjustment:
+	case ClaseAccrual, ClaseOpening:
 		if m.Cantidad.IsNegative() {
 			return fmt.Errorf("%s debe tener cantidad positiva, se recibió %s", m.Clase, m.Cantidad)
 		}
@@ -72,8 +80,9 @@ func (m Movimiento) Validar() error {
 		if m.Cantidad.IsPositive() {
 			return fmt.Errorf("%s debe tener cantidad negativa, se recibió %s", m.Clase, m.Cantidad)
 		}
-	case ClaseReversal:
-		// Cualquier signo: un REVERSAL refleja el movimiento que revierte.
+	case ClaseAdjustment, ClaseReversal:
+		// Signo libre: un ADJUSTMENT puede agregar o quitar días, y un REVERSAL
+		// refleja el signo opuesto del movimiento que revierte.
 	default:
 		return fmt.Errorf("clase de movimiento desconocida: %q", m.Clase)
 	}
