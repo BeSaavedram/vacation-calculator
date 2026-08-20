@@ -60,9 +60,13 @@ func devengarAniversario(tipo TipoDeVacacion, c Colaborador, fecha time.Time) (R
 		Dias:           base.Add(progresivo),
 		DiasBase:       base,
 		DiasProgresivo: progresivo,
-		PeriodoDesde:   fecha.AddDate(-1, 0, 0),
-		PeriodoHasta:   fecha.AddDate(0, 0, -1),
-		DevengadoEl:    fecha,
+		// El período arranca en el aniversario anterior, recortado con la misma
+		// convención de fin de mes que usó EsAniversario para llegar hasta acá.
+		// Con AddDate a secas, el aniversario se recortaba pero su período no, y
+		// quedaba un hueco de días sin pertenecer a ningún otorgamiento.
+		PeriodoDesde: sumarMesesRecortando(fecha, -12),
+		PeriodoHasta: fecha.AddDate(0, 0, -1),
+		DevengadoEl:  fecha,
 		Detalle: fmt.Sprintf("aniversario %d: %s días base + %s progresivos",
 			c.AniosConEmpleadorAl(fecha), base, progresivo),
 	}, true

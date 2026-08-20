@@ -17,7 +17,14 @@ func CalcularVencimiento(tipo TipoDeVacacion, devengadoEl time.Time) *time.Time 
 		if tipo.Parametros.NPeriodos <= 0 {
 			return nil
 		}
-		v := devengadoEl.AddDate(tipo.Parametros.NPeriodos, 0, 0)
+		// Se recorta al fin de mes con la misma convención que el aniversario del
+		// que sale: un devengo del 29 de febrero vence el 28 en un año común.
+		//
+		// OJO: esta fecha se persiste al momento del otorgamiento y no se vuelve
+		// a calcular, así que la convención queda grabada en las filas ya
+		// guardadas. Cambiarla más adelante exige migrar los otorgamientos
+		// existentes, no basta con tocar este código.
+		v := sumarMesesRecortando(devengadoEl, tipo.Parametros.NPeriodos*12)
 		return &v
 
 	case VencimientoFinDeAnio:

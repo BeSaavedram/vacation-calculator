@@ -58,3 +58,22 @@ func TestCalcularVencimiento(t *testing.T) {
 }
 
 func ptrFecha(f time.Time) *time.Time { return &f }
+
+// vence_el se calcula sobre el aniversario y se persiste: debe seguir la misma
+// convención de fin de mes que el aniversario del que sale.
+func TestCalcularVencimiento_RecortaElFinDeMes(t *testing.T) {
+	tipo := TipoDeVacacion{
+		PoliticaVencimiento: VencimientoNPeriodos,
+		Parametros:          Parametros{NPeriodos: 2},
+	}
+
+	got := CalcularVencimiento(tipo, Fecha(2028, 2, 29))
+
+	if got == nil {
+		t.Fatal("esperaba una fecha de vencimiento, dio nil")
+	}
+	if !got.Equal(Fecha(2030, 2, 28)) {
+		t.Fatalf("VenceEl = %s, esperado 2030-02-28: 2030 no es bisiesto",
+			got.Format("2006-01-02"))
+	}
+}

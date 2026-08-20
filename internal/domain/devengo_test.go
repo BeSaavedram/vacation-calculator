@@ -228,3 +228,32 @@ func TestDevengo_NoDevengaAntesDelIngreso(t *testing.T) {
 		t.Fatal("el año calendario tampoco devenga antes del ingreso")
 	}
 }
+
+// El período de un otorgamiento debe pegar exactamente con el del otorgamiento
+// anterior: sin recorte de fin de mes, el aniversario se calculaba recortado
+// pero el PeriodoDesde derivado de él no, y quedaba un hueco de días que no
+// pertenecían a ningún período.
+func TestDevengo_PeriodosContiguosEnAniversarioBisiesto(t *testing.T) {
+	c := Colaborador{FechaIngreso: Fecha(2024, 2, 29)}
+
+	previo, hubo := Devengar(tipoLegal(), c, Fecha(2027, 2, 28))
+	if !hubo {
+		t.Fatal("2027-02-28 es el aniversario recortado: debía devengar")
+	}
+	siguiente, hubo := Devengar(tipoLegal(), c, Fecha(2028, 2, 29))
+	if !hubo {
+		t.Fatal("2028-02-29 es el aniversario bisiesto: debía devengar")
+	}
+
+	if !siguiente.PeriodoDesde.Equal(Fecha(2027, 2, 28)) {
+		t.Fatalf("PeriodoDesde = %s, esperado 2027-02-28",
+			siguiente.PeriodoDesde.Format("2006-01-02"))
+	}
+
+	// La contigüidad es el defecto real, no la fecha suelta.
+	diaSiguiente := previo.PeriodoHasta.AddDate(0, 0, 1)
+	if !diaSiguiente.Equal(siguiente.PeriodoDesde) {
+		t.Fatalf("hueco entre períodos: el previo termina el %s y el siguiente empieza el %s",
+			previo.PeriodoHasta.Format("2006-01-02"), siguiente.PeriodoDesde.Format("2006-01-02"))
+	}
+}
