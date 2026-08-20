@@ -1,0 +1,151 @@
+package domain
+
+import (
+	"testing"
+	"time"
+
+	"github.com/shopspring/decimal"
+)
+
+// tipoLegal replica la configuración del feriado legal chileno.
+func tipoLegal() TipoDeVacacion {
+	return TipoDeVacacion{
+		Codigo:              "FERIADO_LEGAL",
+		PoliticaDevengo:     DevengoAniversarioLegal,
+		PoliticaVencimiento: VencimientoNPeriodos,
+		PrioridadConsumo:    10,
+		UnidadHabil:         true,
+		PagableEnFiniquito:  true,
+		Parametros: Parametros{
+			DiasBase:                        "15",
+			ProgresivoActivo:                true,
+			ProgresivoUmbralMeses:           120,
+			ProgresivoAntiguedadMinimaMeses: 36,
+			ProgresivoCadenciaAnios:         3,
+			ProgresivoDiasPorTramo:          "1",
+			NPeriodos:                       2,
+		},
+	}
+}
+
+// carlos es el colaborador antiguo de la demo: ingreso 2017-04-15 con 24 meses
+// de experiencia previa acreditada.
+func carlos() Colaborador {
+	return Colaborador{
+		FechaIngreso:           Fecha(2017, 4, 15),
+		MesesExperienciaPrevia: 24,
+	}
+}
+
+// CASO DE REFERENCIA DEL DOCUMENTO: 9 años con el empleador actual dan 3 días
+// progresivos, para un total de 18 días.
+func TestDevengo_NueveAniosDanDieciochoDias(t *testing.T) {
+	res, hubo := Devengar(tipoLegal(), carlos(), Fecha(2026, 4, 15))
+
+	if !hubo {
+		t.Fatal("el 2026-04-15 es aniversario de ingreso: debía devengar")
+	}
+	if !res.Dias.Equal(decimal.RequireFromString("18")) {
+		t.Fatalf("Dias = %s, esperado 18", res.Dias)
+	}
+	if !res.DiasProgresivo.Equal(decimal.RequireFromString("3")) {
+		t.Fatalf("DiasProgresivo = %s, esperado 3", res.DiasProgresivo)
+	}
+}
+
+func TestDevengo_ProgresivoEnLosBordes(t *testing.T) {
+	casos := []struct {
+		nombre      string
+		fecha       time.Time
+		esperado    string
+		explicacion string
+	}{
+		{"séptimo aniversario", Fecha(2024, 4, 15), "15",
+			"84 + 24 = 108 meses de experiencia total, bajo el umbral de 120"},
+		{"octavo aniversario, justo en el umbral", Fecha(2025, 4, 15), "17",
+			"96 + 24 = 120 meses exactos; floor(8/3) = 2 días extra"},
+		{"noveno aniversario", Fecha(2026, 4, 15), "18",
+			"floor(9/3) = 3 días extra"},
+	}
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			res, hubo := Devengar(tipoLegal(), carlos(), c.fecha)
+			if !hubo {
+				t.Fatalf("debía devengar en %s", c.fecha.Format("2006-01-02"))
+			}
+			if !res.Dias.Equal(decimal.RequireFromString(c.esperado)) {
+				t.Fatalf("Dias = %s, esperado %s (%s)", res.Dias, c.esperado, c.explicacion)
+			}
+		})
+	}
+}
+
+func TestDevengo_AntiguedadMinimaBloqueaElProgresivo(t *testing.T) {
+	// Alguien con mucha experiencia previa pero recién llegado: supera el umbral
+	// de 120 meses totales, pero no los 36 meses continuos exigidos.
+	novato := Colaborador{FechaIngreso: Fecha(2024, 4, 15), MesesExperienciaPrevia: 200}
+
+	res, hubo := Devengar(tipoLegal(), novato, Fecha(2026, 4, 15))
+	if !hubo {
+		t.Fatal("debía devengar")
+	}
+	if !res.Dias.Equal(decimal.RequireFromString("15")) {
+		t.Fatalf("Dias = %s, esperado 15: no cumple los 36 meses continuos", res.Dias)
+	}
+}
+
+func TestDevengo_SoloEnElAniversario(t *testing.T) {
+	if _, hubo := Devengar(tipoLegal(), carlos(), Fecha(2026, 4, 16)); hubo {
+		t.Fatal("no debía devengar un día que no es aniversario")
+	}
+	if _, hubo := Devengar(tipoLegal(), carlos(), Fecha(2017, 4, 15)); hubo {
+		t.Fatal("el día de ingreso no devenga")
+	}
+}
+
+func TestDevengo_PeriodoDelOtorgamiento(t *testing.T) {
+	res, _ := Devengar(tipoLegal(), carlos(), Fecha(2026, 4, 15))
+
+	if !res.PeriodoDesde.Equal(Fecha(2025, 4, 15)) {
+		t.Fatalf("PeriodoDesde = %s, esperado 2025-04-15", res.PeriodoDesde.Format("2006-01-02"))
+	}
+	if !res.PeriodoHasta.Equal(Fecha(2026, 4, 14)) {
+		t.Fatalf("PeriodoHasta = %s, esperado 2026-04-14", res.PeriodoHasta.Format("2006-01-02"))
+	}
+}
+
+func TestDevengo_AnioCalendario(t *testing.T) {
+	administrativo := TipoDeVacacion{
+		Codigo:              "ADMINISTRATIVO",
+		PoliticaDevengo:     DevengoAnioCalendario,
+		PoliticaVencimiento: VencimientoFinDeAnio,
+		Parametros:          Parametros{DiasBase: "6"},
+	}
+	c := Colaborador{FechaIngreso: Fecha(2020, 3, 1)}
+
+	res, hubo := Devengar(administrativo, c, Fecha(2026, 1, 1))
+	if !hubo {
+		t.Fatal("el año calendario devenga el 1 de enero")
+	}
+	if !res.Dias.Equal(decimal.RequireFromString("6")) {
+		t.Fatalf("Dias = %s, esperado 6", res.Dias)
+	}
+	if !res.PeriodoHasta.Equal(Fecha(2026, 12, 31)) {
+		t.Fatalf("PeriodoHasta = %s, esperado 2026-12-31", res.PeriodoHasta.Format("2006-01-02"))
+	}
+
+	if _, hubo := Devengar(administrativo, c, Fecha(2026, 1, 2)); hubo {
+		t.Fatal("el año calendario no devenga el 2 de enero")
+	}
+}
+
+func TestDevengo_ManualNuncaDevengaSolo(t *testing.T) {
+	rendimiento := TipoDeVacacion{
+		Codigo:          "RENDIMIENTO",
+		PoliticaDevengo: DevengoManual,
+		Parametros:      Parametros{DiasBase: "2"},
+	}
+	if _, hubo := Devengar(rendimiento, carlos(), Fecha(2026, 4, 15)); hubo {
+		t.Fatal("un tipo manual nunca devenga automáticamente")
+	}
+}
