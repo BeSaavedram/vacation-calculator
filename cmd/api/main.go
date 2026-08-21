@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,10 +22,11 @@ func main() {
 	if dsn == "" {
 		log.Fatal("falta DATABASE_URL")
 	}
-	puerto := os.Getenv("PORT")
-	if puerto == "" {
-		puerto = "8080"
+	base := os.Getenv("PORT")
+	if base == "" {
+		base = "8080"
 	}
+	puerto := portLibre(base)
 
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)
@@ -51,6 +55,27 @@ func main() {
 	if err := servidor.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// portLibre devuelve el primer puerto disponible a partir de base.
+func portLibre(base string) string {
+	n, err := strconv.Atoi(base)
+	if err != nil {
+		return base
+	}
+	for p := n; p < n+10; p++ {
+		addr := fmt.Sprintf(":%d", p)
+		l, err := net.Listen("tcp", addr)
+		if err == nil {
+			l.Close()
+			if p != n {
+				log.Printf("puerto %d ocupado, usando %d", n, p)
+			}
+			return strconv.Itoa(p)
+		}
+	}
+	log.Fatalf("no hay puerto disponible en el rango %d-%d", n, n+9)
+	return ""
 }
 
 // empresaUnica resuelve el id de la empresa. Este MVP opera con una sola, pero
