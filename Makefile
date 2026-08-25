@@ -23,7 +23,7 @@ api:
 	go run ./cmd/api
 
 web:
-	cd web && npm run dev
+	cd web && npm run dev -- --port 3000
 
 test:
 	go test ./internal/... -v
